@@ -1,0 +1,23 @@
+# Environment and secrets
+.env
+
+# Runtime data
+/storage/database/*.sqlite
+/storage/database/*.sqlite-*
+/storage/uploads/*
+!/storage/uploads/.gitkeep
+/storage/backups/*
+!/storage/backups/.gitkeep
+/storage/logs/*
+!/storage/logs/.gitkeep
+
+# Test and local tooling
+/vendor/
+/.phpunit.cache/
+coverage/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,2 @@
+<?php use App\Support\Helpers; use App\Support\ValueFormatter; ?>
+<p><a href="<?= Helpers::h($backUrl ?? '/') ?>">← Volver a la consulta</a></p><h1>Detalle del registro</h1><dl class="details"><?php foreach ($columns as $column): ?><div><dt><?= Helpers::h($column['alias'] ?: $column['original_name']) ?></dt><dd><?= Helpers::h(ValueFormatter::format($record['values'][(int)$column['id']] ?? null, $column)) ?></dd></div><?php endforeach; ?></dl>

@@ -1,0 +1,3 @@
+id,nombre,email,fecha_alta,activo,saldo,ciudad
+1,Ana Pérez,ana@example.test,2026-01-02,true,"11.75",Madrid
+3,Elena,elena@example.test,2026-01-04,true,"3.00",Sevilla

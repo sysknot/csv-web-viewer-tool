@@ -1,0 +1,10 @@
+.git
+.env
+storage/database
+storage/uploads
+storage/backups
+storage/logs
+vendor
+tests
+.idea
+.vscode

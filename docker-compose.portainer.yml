@@ -1,0 +1,46 @@
+services:
+  app:
+    image: ${IMAGE_NAME}
+    restart: unless-stopped
+    # Required by docker/entrypoint.sh to fix ownership of the named volume.
+    # Apache drops privileges to www-data after this initialization.
+    user: "0:0"
+
+    environment:
+      APP_ENV: production
+      APP_SECRET: ${APP_SECRET}
+      APP_URL: ${APP_URL}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Europe/Madrid}
+      ADMIN_USERNAME: ${ADMIN_USERNAME}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH}
+      FRONTEND_PASSWORD_HASH: ${FRONTEND_PASSWORD_HASH}
+      DB_PATH: /var/www/storage/database/app.sqlite
+      UPLOAD_MAX_SIZE: ${UPLOAD_MAX_SIZE:-52428800}
+      SESSION_TIMEOUT: ${SESSION_TIMEOUT:-3600}
+
+    volumes:
+      - csv_web_viewer_data:/var/www/storage
+
+    networks:
+      proxy:
+        aliases:
+          - csv-web-viewer
+
+    healthcheck:
+      test: ["CMD", "php", "-r", "$$p=getenv('DB_PATH') ?: '/var/www/storage/database/app.sqlite'; new PDO('sqlite:'.$$p); echo 'ok';"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  # Create this once in Portainer. Marking it external prevents a stack removal
+  # from deleting the SQLite database and uploaded files.
+  csv_web_viewer_data:
+    external: true
+
+networks:
+  # The proxy container nginx-core must also be connected to this network.
+  proxy:
+    external: true
+    name: csv-web-viewer-proxy

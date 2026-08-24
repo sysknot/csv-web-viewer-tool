@@ -117,6 +117,34 @@ docker compose up -d --build
 
 Las migraciones se ejecutan automáticamente al iniciar la aplicación. El volumen `csv_data` conserva la base y los datos al recrear el contenedor.
 
+## Despliegue en Portainer
+
+El archivo [`docker-compose.portainer.yml`](docker-compose.portainer.yml) es la definición de producción para Portainer. No publica puertos: Nginx se conecta al servicio mediante la red Docker interna `csv-web-viewer-proxy`.
+
+Antes del primer despliegue, crea en Portainer el volumen local `csv_web_viewer_data`. Es externo al stack para que nunca se borre al actualizar o eliminar el stack. Crea también la red `csv-web-viewer-proxy` y conecta a ella el contenedor `nginx-core`.
+
+En **Stacks**, pega el contenido de `docker-compose.portainer.yml` y define estas variables en la interfaz de Portainer:
+
+| Variable | Valor de producción |
+|---|---|
+| `IMAGE_NAME` | Por ejemplo, `pixelshub.azurecr.io/csv-web-viewer:0.3.0`. Usa siempre un tag de versión, no `latest`. |
+| `APP_SECRET` | Secreto aleatorio persistente, por ejemplo el resultado de `openssl rand -hex 32`. No lo cambies entre versiones. |
+| `APP_URL` | URL pública exacta, por ejemplo `https://csv-viewer.pixels-hub.app`. |
+| `ADMIN_USERNAME` | Usuario administrador. |
+| `ADMIN_PASSWORD_HASH` | Hash bcrypt del administrador. |
+| `FRONTEND_PASSWORD_HASH` | Hash bcrypt del acceso público. |
+
+El contenedor debe conservar `user: "0:0"`. Al iniciar, `docker/entrypoint.sh` asigna de forma explícita la propiedad y permisos de `/var/www/storage` a `www-data`, antes de que Apache inicie sus procesos sin privilegios. Esto es necesario para SQLite, que crea los ficheros `app.sqlite-wal` y `app.sqlite-shm` junto a la base.
+
+Para actualizar a una nueva versión:
+
+1. Haz una copia de seguridad desde **Administración → Ajustes**.
+2. Publica la nueva imagen con un tag nuevo, por ejemplo `0.3.0`.
+3. En Portainer, cambia solo `IMAGE_NAME` a ese tag y pulsa **Update the stack** con la opción de volver a obtener la imagen activada, si aparece.
+4. Comprueba que el contenedor queda `healthy`, abre la aplicación y revisa sus logs.
+
+No elimines el volumen `csv_web_viewer_data`. Si el arranque falla con el mensaje de almacenamiento no escribible, el volumen o su driver no admite que Docker cambie propietario: corrige los permisos del directorio del host/servidor que lo respalda para que UID/GID `33` (`www-data`) tenga lectura y escritura. No uses un volumen de solo lectura ni añadas `read_only: true` al servicio.
+
 ## Crear y publicar la imagen Docker (Azure Container Registry)
 
 La imagen no incluye `.env`, la base SQLite ni archivos subidos: los secretos y los datos se entregan en tiempo de ejecución mediante variables de entorno y el volumen `csv_data`.

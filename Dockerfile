@@ -27,6 +27,10 @@ RUN chmod 755 /var/www/docker/entrypoint.sh
 ENV APACHE_DOCUMENT_ROOT=/var/www/public
 RUN sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/*.conf /etc/apache2/apache2.conf /etc/apache2/conf-available/*.conf
 
+# The entrypoint prepares the persistent SQLite volume before Apache starts.
+# Keep the container process as root until Apache drops privileges to www-data.
+USER root
+
 EXPOSE 80
 ENTRYPOINT ["/var/www/docker/entrypoint.sh"]
 CMD ["apache2-foreground"]

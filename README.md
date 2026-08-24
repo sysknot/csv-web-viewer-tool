@@ -117,12 +117,52 @@ docker compose up -d --build
 
 Las migraciones se ejecutan automáticamente al iniciar la aplicación. El volumen `csv_data` conserva la base y los datos al recrear el contenedor.
 
-## Tests
+## Crear y publicar la imagen Docker (Azure Container Registry)
 
-Las pruebas están libres de dependencias externas y se ejecutan con PHP dentro del contenedor:
+La imagen no incluye `.env`, la base SQLite ni archivos subidos: los secretos y los datos se entregan en tiempo de ejecución mediante variables de entorno y el volumen `csv_data`.
+
+Antes de publicar, actualiza el tag de versión (`0.2.0` en este ejemplo) y entra en el registro:
 
 ```bash
-docker compose run --rm app php tests/run.php
+docker login pixelshub.azurecr.io
+docker build --pull --build-arg IMAGE_VERSION=0.2.0 --build-arg VCS_REF="$(git rev-parse --short HEAD)" -t pixelshub.azurecr.io/csv-web-viewer:0.2.0 -t pixelshub.azurecr.io/csv-web-viewer:latest .
+docker push pixelshub.azurecr.io/csv-web-viewer:0.2.0
+docker push pixelshub.azurecr.io/csv-web-viewer:latest
+```
+
+En PowerShell, sustituye el valor de `VCS_REF` por `(git rev-parse --short HEAD)`:
+
+```powershell
+docker build --pull --build-arg IMAGE_VERSION=0.2.0 --build-arg VCS_REF=(git rev-parse --short HEAD) -t pixelshub.azurecr.io/csv-web-viewer:0.2.0 -t pixelshub.azurecr.io/csv-web-viewer:latest .
+```
+
+Para desplegar esa imagen con Compose, deja un `.env` seguro en el servidor (con los hashes y `APP_SECRET` reales) y ejecuta:
+
+```bash
+IMAGE_NAME=pixelshub.azurecr.io/csv-web-viewer:0.2.0 docker compose pull
+IMAGE_NAME=pixelshub.azurecr.io/csv-web-viewer:0.2.0 docker compose up -d
+```
+
+El volumen nombrado `csv_data` debe conservarse entre despliegues. Haz un backup desde **Ajustes** antes de actualizar o restablecer una instalación de producción.
+
+## Restablecer una instalación
+
+En **Administración → Ajustes** se puede reemplazar la **contraseña de acceso público**. Se almacena únicamente su hash bcrypt en la base SQLite; el valor de `FRONTEND_PASSWORD_HASH` en `.env` se usa como valor inicial y como respaldo.
+
+En la misma pantalla está la sección **Restablecer base de datos**. Es necesario escribir `CONFIRMO` exactamente. El proceso es transaccional y elimina registros, columnas, configuraciones, historial de importaciones y auditoría; conserva el esquema y el acceso de administrador definido en `.env`. La contraseña pública personalizada se elimina y vuelve al valor de `FRONTEND_PASSWORD_HASH`. Las copias de seguridad ya descargadas no se modifican.
+
+## Tests
+
+Las pruebas están libres de dependencias externas y se ejecutan con PHP dentro de un contenedor temporal. El directorio de pruebas se monta en solo lectura y no forma parte de la imagen de producción:
+
+```bash
+docker compose run --rm -v "$(pwd)/tests:/var/www/tests:ro" app php tests/run.php
+```
+
+En PowerShell:
+
+```powershell
+docker compose run --rm -v "${PWD}\tests:/var/www/tests:ro" app php tests/run.php
 ```
 
 Cubren parser, tipos, candidatos de clave, importación inicial, actualización, registros inactivos, columnas desaparecidas, duplicados, rollback y autenticación básica.

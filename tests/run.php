@@ -10,8 +10,10 @@ use App\Services\Csv\CsvAnalyzer;
 use App\Services\Csv\TypeDetector;
 use App\Services\Import\ImportService;
 use App\Services\AuthService;
+use App\Services\DatabaseResetService;
 use App\Security\Session;
 use App\Support\Logger;
+use App\Support\ValueFormatter;
 
 $failures = 0;
 $assert = static function (bool $condition, string $message) use (&$failures): void { if (!$condition) { $failures++; fwrite(STDERR, "FALLO: {$message}\n"); } };
@@ -23,6 +25,9 @@ try {
     $assert($analysis['types']['activo'] === 'boolean', 'Debe detectar booleanos.');
     $assert($analysis['candidates']['id'] === true, 'Debe validar id único.');
     $assert(TypeDetector::isDate('2026-01-02'), 'Debe reconocer fechas ISO.');
+    $assert(ValueFormatter::webUrl('https://example.com/ruta') === 'https://example.com/ruta', 'Debe reconocer enlaces HTTPS.');
+    $assert(ValueFormatter::webUrl('www.example.com/ruta') === 'https://www.example.com/ruta', 'Debe completar enlaces que empiezan por www.');
+    $assert(ValueFormatter::webUrl('javascript:alert(1)') === null, 'No debe convertir esquemas inseguros en enlaces.');
     $connection = new Connection($temp . '/app.sqlite'); (new Migrator($connection->pdo()))->migrate();
     $settings = new SettingsRepository($connection->pdo()); $service = new ImportService($connection->pdo(), $analyzer, $settings, new Logger($temp . '/app.log'));
     $first = $service->import(__DIR__ . '/Fixtures/initial.csv', 'initial.csv', 1, ',', ['id'], false, 'test');
@@ -32,8 +37,14 @@ try {
     try { $service->import(__DIR__ . '/Fixtures/duplicate.csv', 'duplicate.csv', 1, ',', ['id'], false, 'test'); $assert(false, 'Debe rechazar claves duplicadas.'); } catch (RuntimeException) { $assert((int) $connection->pdo()->query('SELECT COUNT(*) FROM data_records WHERE active=1')->fetchColumn() === 2, 'Un fallo no debe alterar la fotografía anterior.'); }
     $service->import(__DIR__ . '/Fixtures/removed-column.csv', 'removed-column.csv', 1, ',', ['id'], false, 'test');
     $assert((int) $connection->pdo()->query("SELECT present_in_last_import FROM dataset_columns WHERE original_name = 'email'")->fetchColumn() === 0, 'Las columnas ausentes deben conservarse como históricas.');
-    $auth = new AuthService(new Session(3600, false), 'admin', password_hash('admin-pass', PASSWORD_DEFAULT), password_hash('reader-pass', PASSWORD_DEFAULT));
+    (new DatabaseResetService($connection->pdo()))->reset();
+    $assert((int) $connection->pdo()->query('SELECT COUNT(*) FROM data_records')->fetchColumn() === 0, 'El restablecimiento debe eliminar los registros.');
+    $assert((int) $connection->pdo()->query('SELECT COUNT(*) FROM dataset_columns')->fetchColumn() === 0, 'El restablecimiento debe eliminar la configuración de columnas.');
+    $assert($settings->get('logical_key_columns') === '[]' && $settings->get('default_page_size') === '25', 'El restablecimiento debe recuperar los ajustes iniciales.');
+    $auth = new AuthService(new Session(3600, false), 'admin', password_hash('admin-pass', PASSWORD_DEFAULT), password_hash('reader-pass', PASSWORD_DEFAULT), $settings);
     $auth->start('reader'); $assert(!$auth->loginReader('incorrecta'), 'No debe autenticar una contraseña pública inválida.'); $assert($auth->loginReader('reader-pass') && $auth->isReader(), 'Debe autenticar al lector.'); $auth->logout();
+    $auth->changeReaderPassword('reader-pass-nueva');
+    $auth->start('reader'); $assert(!$auth->loginReader('reader-pass'), 'Debe invalidar la contraseña pública anterior.'); $assert($auth->loginReader('reader-pass-nueva'), 'Debe autenticar con la contraseña pública reemplazada.'); $auth->logout();
     $auth->start('admin'); $assert(!$auth->loginAdmin('admin', 'incorrecta'), 'No debe autenticar al administrador con contraseña inválida.'); $assert($auth->loginAdmin('admin', 'admin-pass') && $auth->isAdmin(), 'Debe mantener separado el ámbito administrativo.'); $auth->logout();
 } finally {
     foreach (glob($temp . '/*') ?: [] as $file) @unlink($file); @rmdir($temp);

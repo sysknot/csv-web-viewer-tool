@@ -19,6 +19,7 @@ use App\Security\Session;
 use App\Services\AuthService;
 use App\Services\BackupService;
 use App\Services\Csv\CsvAnalyzer;
+use App\Services\DatabaseResetService;
 use App\Services\Import\ImportService;
 use App\Support\Logger;
 use App\Support\Helpers;
@@ -33,11 +34,11 @@ try {
     $settings = new SettingsRepository($db); $audit = new AuditRepository($db); $dataset = new DatasetRepository($db);
     $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
     $session = new Session($config['session_timeout'], $https); $csrf = new Csrf();
-    $auth = new AuthService($session, (string) $config['admin_username'], (string) $config['admin_password_hash'], (string) $config['frontend_password_hash']);
+    $auth = new AuthService($session, (string) $config['admin_username'], (string) $config['admin_password_hash'], (string) $config['frontend_password_hash'], $settings);
     $renderer = new Renderer(APP_ROOT . '/src/Views');
     $authController = new AuthController($renderer, $auth, $csrf, $logger, $audit);
     $publicController = new PublicController($renderer, $auth, $csrf, $dataset, $settings);
-    $adminController = new AdminController($renderer, $auth, $csrf, $dataset, $settings, $audit);
+    $adminController = new AdminController($renderer, $auth, $csrf, $dataset, $settings, $audit, new DatabaseResetService($db));
     $importController = new ImportController($renderer, $auth, $csrf, new ImportService($db, new CsvAnalyzer(), $settings, $logger), $settings, $audit, $config['storage_path'] . '/uploads', $config['upload_max_size']);
     $backupController = new BackupController($auth, $csrf, new BackupService($db, $config['storage_path'] . '/backups'));
 
@@ -59,6 +60,8 @@ try {
     elseif ($method === 'GET' && $path === '/admin/history') $adminController->history();
     elseif ($method === 'GET' && $path === '/admin/settings') $adminController->settings();
     elseif ($method === 'POST' && $path === '/admin/settings') $adminController->saveSettings();
+    elseif ($method === 'POST' && $path === '/admin/change-reader-password') $adminController->changeReaderPassword();
+    elseif ($method === 'POST' && $path === '/admin/reset-database') $adminController->resetDatabase();
     elseif ($method === 'POST' && $path === '/admin/backups') $backupController->download();
     elseif ($method === 'GET' && preg_match('#^/record/(\d+)$#', $path, $matches)) $publicController->detail((int) $matches[1]);
     elseif ($method === 'GET' && $path === '/') $publicController->index();

@@ -34,8 +34,11 @@ final class ImportService
         $importId = (int) $this->db->lastInsertId();
         $started = microtime(true);
         try {
+            // Las tablas TEMP sobreviven a un COMMIT dentro de la misma conexión.
+            // Se crea una sola vez y se vacía dentro de cada transacción para evitar bloqueos al eliminarla.
+            $this->db->exec('CREATE TEMP TABLE IF NOT EXISTS staging_records (logical_key TEXT PRIMARY KEY, logical_key_json TEXT NOT NULL, source_hash TEXT NOT NULL, values_json TEXT NOT NULL, row_number INTEGER NOT NULL)');
             $this->db->beginTransaction();
-            $this->db->exec('CREATE TEMP TABLE staging_records (logical_key TEXT PRIMARY KEY, logical_key_json TEXT NOT NULL, source_hash TEXT NOT NULL, values_json TEXT NOT NULL, row_number INTEGER NOT NULL)');
+            $this->db->exec('DELETE FROM staging_records');
             $insertStage = $this->db->prepare('INSERT INTO staging_records (logical_key, logical_key_json, source_hash, values_json, row_number) VALUES (?, ?, ?, ?, ?)');
             $handle = fopen($path, 'rb');
             if ($handle === false) throw new \RuntimeException('No se pudo abrir el CSV para importar.');
@@ -82,6 +85,7 @@ final class ImportService
                     $upsertValue->execute([$recordId, $columnMap[$header], $normal['raw'], $normal['text'], $normal['number'], $normal['datetime'], $normal['boolean'], $importId]);
                 }
             }
+            $staged->closeCursor();
             $deactivate = $this->db->prepare('UPDATE data_records SET active = 0, updated_at = ? WHERE active = 1 AND (last_seen_import_id IS NULL OR last_seen_import_id != ?)');
             $deactivate->execute([$now, $importId]);
             $removed = $deactivate->rowCount();

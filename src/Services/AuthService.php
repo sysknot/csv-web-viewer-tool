@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Repositories\SettingsRepository;
 use App\Security\Session;
 
 final class AuthService
@@ -12,6 +13,7 @@ final class AuthService
         private readonly string $adminUsername,
         private readonly string $adminHash,
         private readonly string $readerHash,
+        private readonly SettingsRepository $settings,
     ) {}
 
     public function start(string $scope): void
@@ -21,13 +23,19 @@ final class AuthService
 
     public function loginReader(string $password): bool
     {
-        if ($this->readerHash === '' || !password_verify($password, $this->readerHash)) {
+        $hash = $this->settings->get('frontend_password_hash', '') ?: $this->readerHash;
+        if ($hash === '' || !password_verify($password, $hash)) {
             return false;
         }
         session_regenerate_id(true);
         $_SESSION['authenticated'] = true;
         $_SESSION['role'] = 'reader';
         return true;
+    }
+
+    public function changeReaderPassword(string $password): void
+    {
+        $this->settings->set('frontend_password_hash', password_hash($password, PASSWORD_DEFAULT));
     }
 
     public function loginAdmin(string $username, string $password): bool

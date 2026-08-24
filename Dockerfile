@@ -1,5 +1,12 @@
 FROM php:8.3-apache
 
+ARG IMAGE_VERSION=dev
+ARG VCS_REF=unknown
+LABEL org.opencontainers.image.title="CSV Web Viewer" \
+      org.opencontainers.image.description="Visor seguro de fotografías CSV con PHP y SQLite" \
+      org.opencontainers.image.version="${IMAGE_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}"
+
 RUN apt-get update \
     && apt-get install -y --no-install-recommends libsqlite3-dev \
     && rm -rf /var/lib/apt/lists/* \

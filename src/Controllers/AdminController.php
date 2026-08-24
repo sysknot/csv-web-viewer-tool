@@ -9,11 +9,12 @@ use App\Repositories\DatasetRepository;
 use App\Repositories\SettingsRepository;
 use App\Security\Csrf;
 use App\Services\AuthService;
+use App\Services\DatabaseResetService;
 use App\Support\Helpers;
 
 final class AdminController
 {
-    public function __construct(private readonly Renderer $views, private readonly AuthService $auth, private readonly Csrf $csrf, private readonly DatasetRepository $dataset, private readonly SettingsRepository $settings, private readonly AuditRepository $audit) {}
+    public function __construct(private readonly Renderer $views, private readonly AuthService $auth, private readonly Csrf $csrf, private readonly DatasetRepository $dataset, private readonly SettingsRepository $settings, private readonly AuditRepository $audit, private readonly DatabaseResetService $databaseReset) {}
 
     public function dashboard(): void
     {
@@ -75,6 +76,32 @@ final class AdminController
         if (!in_array($pageSize, [10, 25, 50, 100], true)) $pageSize = 25;
         $this->settings->set('show_historical_columns', isset($_POST['show_historical_columns']) ? '1' : '0'); $this->settings->set('default_page_size', (string) $pageSize);
         $this->audit->add($this->actor(), 'settings_updated'); $this->flash('Ajustes guardados.'); Helpers::redirect('/admin/settings');
+    }
+
+    public function changeReaderPassword(): void
+    {
+        $this->guard(); $this->verifyCsrf();
+        $password = (string) ($_POST['password'] ?? '');
+        if (strlen($password) < 12 || $password !== (string) ($_POST['password_confirmation'] ?? '')) {
+            $this->flash('La contraseña no se ha cambiado: debe tener al menos 12 caracteres y coincidir en ambos campos.');
+            Helpers::redirect('/admin/settings');
+        }
+        $this->auth->changeReaderPassword($password);
+        $this->audit->add($this->actor(), 'reader_password_changed');
+        $this->flash('Contraseña de acceso actualizada.');
+        Helpers::redirect('/admin/settings');
+    }
+
+    public function resetDatabase(): void
+    {
+        $this->guard(); $this->verifyCsrf();
+        if (trim((string) ($_POST['confirmation'] ?? '')) !== 'CONFIRMO') {
+            $this->flash('No se ha eliminado nada: escribe CONFIRMO exactamente para confirmar la acción.');
+            Helpers::redirect('/admin/settings');
+        }
+        $this->databaseReset->reset();
+        $this->flash('Base de datos restablecida. Ya puedes importar un CSV nuevo.');
+        Helpers::redirect('/admin/settings');
     }
 
     private function guard(): void

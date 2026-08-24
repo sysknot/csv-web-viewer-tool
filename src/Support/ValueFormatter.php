@@ -21,4 +21,16 @@ final class ValueFormatter
         }
         return $value;
     }
+
+    /** Devuelve una URL navegable únicamente para direcciones web HTTP(S) válidas. */
+    public static function webUrl(?string $value): ?string
+    {
+        if ($value === null) return null;
+        $url = trim($value);
+        if ($url === '' || preg_match('/\s/', $url)) return null;
+        if (str_starts_with(strtolower($url), 'www.')) $url = 'https://' . $url;
+        if (filter_var($url, FILTER_VALIDATE_URL) === false) return null;
+        $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+        return in_array($scheme, ['http', 'https'], true) ? $url : null;
+    }
 }
